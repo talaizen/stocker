@@ -11,6 +11,7 @@ import { User } from "../users/entities/user.entity";
 import { RegisterDto } from "./dto/register.dto";
 import { LoginDto } from "./dto/login.dto";
 import { AuthResponseDto } from "./dto/auth-response.dto";
+import { QueryFailedError } from "typeorm";
 
 @Injectable()
 export class AuthService {
@@ -30,13 +31,23 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, this.BCRYPT_ROUNDS);
 
-    const user = await this.usersService.createLocalUser({
-      email: dto.email,
-      name: dto.name,
-      passwordHash,
-    });
+    try {
+      const user = await this.usersService.createLocalUser({
+        email: dto.email,
+        name: dto.name,
+        passwordHash,
+      });
 
-    return this.buildAuthResponse(user);
+      return this.buildAuthResponse(user);
+    } catch (error) {
+      if (
+        error instanceof QueryFailedError &&
+        error.driverError?.code === "23505"
+      ) {
+        throw new ConflictException("Email already registered");
+      }
+      throw error;
+    }
   }
 
   async login(dto: LoginDto): Promise<AuthResponseDto> {
